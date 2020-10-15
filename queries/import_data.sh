@@ -1,0 +1,1 @@
+curl -XPOST "localhost:9200/movies/_bulk?pretty" -H 'Content-Type: application/json' --data-binary @/home/aref/Code/elastic_stack/dataset/movies_dataset.json

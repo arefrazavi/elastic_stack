@@ -1,0 +1,436 @@
+# Create index with structured mappings
+PUT movies
+{ "settings": {
+    "analysis": {
+      "filter": {
+        "autocomplete_filter": {
+          "type": "edge_ngram",
+          "min_gram": 1,
+          "max_gram": 20
+        },
+        "english_stemmer": {
+          "type":       "stemmer",
+          "language":   "english"
+        }
+      },
+      "analyzer": {
+        "autocomplete_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": [
+            "lowercase",
+            "autocomplete_filter"
+          ]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": {"type" : "integer"},
+      "year" : {"type" : "date"},
+      "genre" : {"type": "search_as_you_type"},
+      "title": {"type": "search_as_you_type"},
+      "title_text": {
+        "type": "text",
+        "analyzer": "autocomplete_analyzer",
+        "fields": {
+          "raw": {"type": "keyword"}
+        }
+      }
+    }
+  }
+}
+
+# Autocomplete analyzer
+PUT movies_with_autocomplete
+{ "mappings": {
+    "properties": {
+      "id": {"type" : "integer"},
+      "year" : {"type" : "date"},
+      "genre" : {"type": "search_as_you_type"},
+      "title": {"type": "search_as_you_type"}
+    }
+  }
+}
+
+
+# Creat index with parent/child relationship
+PUT series
+{
+  "mappings": {
+    "properties": {
+      "film_to_franchise": {
+        "type" : "join",
+        "relations": { "franchise" : "film"}
+      }
+    }
+  }
+}
+
+PUT system_log
+
+
+# *** Modify Mapping params
+
+# Add mapping to the given index
+PUT system_log/_mapping
+{
+  "properties": {
+    "host": {"type": "flattened"},
+    "timestamp": {"type": "date"},
+    "service_number": {"type": "integer"}
+  }
+}
+
+# close index to change non-dynamic mapping param
+POST system_log/_close
+
+# Change mappings settings => verb : PUT
+PUT system_log/_settings
+{
+  "index.mapping.ignore_malformed": true,
+  "index.mapping.total_fields.limit": 1300
+}
+POST system_log/_open
+
+
+# *** Insert ***
+
+# Add a single document => verb: POST
+# https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-index_.html
+POST movies/_doc
+{
+  "genre": ["Fantasy", "Horror", "Thriller"],
+  "title": "Fright Night",
+  "title_text": "Fright Night",
+  "year": "1985"
+}
+# Add a single document with specific id => verb: POST/PUT
+PUT movies/_doc/1002
+{
+  "genre": ["Action", "Sci-Fi"],
+  "title": "Star Trek Ultimate Fight And Beyond",
+  "title_text": "Star Trek Ultimate Fight And Beyond",
+  "year": "2020"
+}
+
+# Add a document with an invalid value type for a field when index.mapping.ignore_malformed is enabled.
+POST system_log/_doc
+{
+  "host": {
+    "server": "trip.me",
+    "name": "trip.me",
+    "ip": "192.168.0.2"
+  },
+  "service_number": "non"
+}
+
+
+# Add multiple documents in one query (with/without specifying id) => verb : POST/PUT
+POST movies/_bulk
+{"create":{"_id": 6666}}
+{"genre":["Action","Sci-Fi"],"title":"Inception", "title_text":"Inception", "year":"2010"}
+{"create":{}}
+{"genre":["Drama","Crime"],"title":"The Godfather","title_text":"The Godfather", "year":"1972"}
+{"create":{}}
+{"genre":["Drama"],"title":"The Shawshank Redemption", "title_text":"The Shawshank Redemption", "year":"1995"}
+
+# Add a document to an index with parent/child property. Routing param is mandatory determing the shard for the doc.
+POST series/_doc/1000000?routing=1
+{
+  "film_to_franchise": {
+    "name": "film",
+    "parent": "1"
+  },
+  "genre": ["Sci-Fi", "Action", "Adventure"],
+  "title": "Star Wars: The Rise of Skywalker (Episode IX)",
+  "year": "2019"
+}
+
+
+# Copy: Reindex index to another index
+POST _reindex
+{
+  "source": {"index": "movies"},
+  "dest": {"index": "movies_with_autocomplete"}
+}
+
+
+# *** Delete ***
+
+# Delete index
+DELETE movies
+
+# Delete document by id => verb: DELETE
+DELETE movies/_doc/uASc8HQBkIWdbodugrEp
+
+# Delete documents by query => verb: POST
+POST movies/_delete_by_query
+{
+  "query": {
+    "bool" : {
+      "should": [
+          {
+            "match": {
+              "title" : {
+                "query" : "Shawshank",
+                "operator" : "or"
+              }
+            }
+          },
+          {
+            "match" : {
+              "title" : {
+                "query" : "Interstellar",
+                "operator" : "or"
+              }
+            }
+          }
+      ]
+    }
+  }
+}
+
+# *** Update ****
+
+# Partial update a document by id => verb: POST
+POST movies/_update/6666
+{
+  "doc" : {
+    "title":"Inception"
+  }
+}
+
+# Update all fields of documnet by id => verb: POST/PUT
+PUT movies/_doc/6666
+{
+  "genre":["Action","Sci-Fi"],"title":"Inception 666","year":"2010"
+}
+
+
+# Update a doc by explicity mentioning the sequence number and primary term (in the latest version of the doc).
+POST movies/_update/6666?if_seq_no=59&if_primary_term=2
+{
+  "doc" : {
+    "title":"Inception XX"
+  }
+}
+
+# Updating doc by retrying the updates 5 times when an error happens (e.g. concurrency issues).
+POST movies/_update/6666?retry_on_conflict=5
+{
+  "doc" : {
+    "title":"Inception YY"
+  }
+}
+
+
+# *** Get/Search ***
+
+# Get mappings of the index
+GET ratings/_mapping
+
+# Find document by id
+GET movies/_doc/6666
+
+# Find all documents
+GET movies/_search
+
+# Testing the analyzer.
+GET movies/_analyze
+{
+  "analyzer": "autocomplete_analyzer",
+  "text": "star"
+}
+GET _analyze
+{
+  "tokenizer" : "standard",
+   "filter": [{"type":"edge_ngram", "min_gram": 1, "max_gram": 4}],
+   "text" : "Star"
+}
+
+# URI search (shorthand query or query lite)
+# The url must be encoded.
+
+# boolean URI search
+# GET movies/_search?q=+year:>2015+title:star => must be encoded to :
+GET movies/_search?q=%2Byear%3A%3E2015+%2Btitle%3Astar
+
+
+# Term search
+GET movies/_search
+{
+  "query" : {
+    "match" : {
+      "title" : "star trek"
+    }
+  }
+}
+# Exact term search on a field with keyword type (case-sensitive)
+GET movies/_search
+{
+  "query": {
+    "match": {
+      "genre": "Sci-Fi"
+    }
+  }
+}
+
+# Proximity search using phrase match
+GET movies/_search
+{
+  "query": {
+    "match_phrase": {
+      "title": {"query": "Star beyond", "slop": 100}
+    }
+  }
+}
+
+# Tow ways of having mutltiple AND conditions.
+GET movies/_search
+{
+  "query": {
+    "bool": {
+      "must": {
+        "term": {"title": "star"}
+      },
+      "filter": [
+        {"range": {"year": {"gte": "2016"}}}
+      ]
+    }
+  }
+}
+GET movies/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {"term": {"title": "star"}},
+        {"range": {"year": {"gte": "2016"}}}
+      ]
+    }
+  }
+}
+
+# Search with OR conditions
+GET movies/_search
+{
+  "query": {
+    "bool": {
+      "should": [
+        {"term": {"title": "warks"}},
+        {"range":{"year": {"gte": "2010", "lte": "2017"}}}
+      ]
+    }
+  }
+}
+
+# Multi-match query
+GET movies/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "star",
+      "fields": ["title", "genre"]
+    }
+  }
+}
+
+# Join Query: Find all the children documents of a parent document.
+GET series/_search
+{
+  "query" : {
+    "has_parent": {
+      "parent_type": "franchise",
+      "query": {
+        "match":  {"title" : "Star wars"}
+      }
+    }
+  }
+}
+
+# Join Query: Find parent document of a child.
+GET series/_search
+{
+  "query": {
+    "has_child": {
+      "type": "film",
+      "query": {
+        "match": { "title" : "Attack of the Clone" }
+      }
+    }
+  }
+}
+
+# Pagination and sorting
+# GET movies/_search?size=2&from=2
+GET movies/_search
+{
+  "from": 2,
+  "size": 2,
+  "query": {
+    "bool": {
+      "filter": {"term": {"genre": "Sci-Fi"}}
+    }
+  },
+  "sort": [
+    {"year": "desc"},
+    {"title.raw": "asc"}
+  ]
+}
+
+# Fuzzy search: similar term search
+GET movies/_search
+{
+  "query": {
+    "fuzzy": {
+      "title": {"value": "trak", "fuzziness": "AUTO"}
+    }
+  }
+}
+
+
+# Partial Match
+GET movies/_search
+{
+  "query": {
+    "wildcard": {
+      "title": {"value": "*re*"}
+    }
+  }
+}
+
+
+# Autocomplete (search-as-you-type) search: Query time
+GET movies/_search
+{
+  "query": {
+    "match_phrase_prefix": {
+      "title": {"query": "star t", "slop": 10}
+    }
+  }
+}
+
+# Autocomplete (search-as-you-type) search: Index time with n-grams
+GET movies/_search
+{
+  "query": {
+    "match": {"title_text": {
+      "query": "star tr",
+      "analyzer": "standard"
+    }}
+  }
+}
+
+# utocomplete (search-as-you-type) search: index time with "search_as_you_type" field
+GET movies_with_autocomplete/_search
+{
+  "query": {
+    "multi_match": {
+      "query": "star tr",
+      "type": "bool_prefix",
+      "fields": ["title", "title._2gram", "title._3gram"]
+    }
+  }
+}
