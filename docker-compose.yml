@@ -61,9 +61,12 @@ services:
       - "5000:5000/udp"
       - "9600:9600"
     volumes:
-      - ./dataset/access.log:/usr/share/logstash/pipeline/access.log
-      - ./docker-configs/logstash/pipeline/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
-    command: bin/logstash -f /usr/share/logstash/pipeline/logstash.conf
+      - ./dataset/access.log:/dataset/access.log
+      - ./plugins/mysql-connector-java-8.0.21:/plugins/mysql-connector-java-8.0.21
+      - ./docker-configs/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./docker-configs/logstash/config/pipelines.yml:/usr/share/logstash/config/pipelines.yml
+    # command: bin/logstash -f /usr/share/logstash/pipeline/logstash.conf
+    command: --config.reload.automatic
     environment:
       http.host: "0.0.0.0"
       LS_JAVA_OPTS: "-Xms512m -Xmx512m"
@@ -71,6 +74,7 @@ services:
       - elastic
     depends_on:
       - elasticsearch
+      - mysql
 
 networks:
   elastic:
