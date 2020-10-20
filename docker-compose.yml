@@ -1,86 +1,82 @@
-version: '2.2'
+version: '3.2'
+
 services:
-  es01:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.1
-    container_name: es01
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.2
+    ports:
+      - "9200:9200"
+      - "9300:9300"
     environment:
-      - node.name=es01
-      - cluster.name=es-docker-cluster
-      - discovery.seed_hosts=es02,es03
-      - cluster.initial_master_nodes=es01,es02,es03
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      # There is only one es node.
+      discovery.type: "single-node"
+      node.name: "elasticsearch"
+      cluster.name: "es-docker-cluster"
+      bootstrap.memory_lock: "true"
+      # Max Heap size
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+    volumes:
+      - /usr/share/elasticsearch/data
     ulimits:
       memlock:
         soft: -1
         hard: -1
-    volumes:
-      - data01:/usr/share/elasticsearch/data
-    ports:
-      - 9200:9200
     networks:
       - elastic
 
-  es02:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.1
-    container_name: es02
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.9.2
+    ports:
+      - "5601:5601"
     environment:
-      - node.name=es02
-      - cluster.name=es-docker-cluster
-      - discovery.seed_hosts=es01,es03
-      - cluster.initial_master_nodes=es01,es02,es03
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    volumes:
-      - data02:/usr/share/elasticsearch/data
-    ports:
-      - 9201:9201
+      SERVER_NAME: kibana
+      SERVER_HOST: 0.0.0.0
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_REQUESTTIMEOUT: 150000
     networks:
       - elastic
+    depends_on:
+      - elasticsearch
 
-  es03:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.1
-    container_name: es03
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    ports:
+      - 3380:3306
     environment:
-      - node.name=es03
-      - cluster.name=es-docker-cluster
-      - discovery.seed_hosts=es01,es02
-      - cluster.initial_master_nodes=es01,es02,es03
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - MYSQL_DATABASE=movie_db
+      - MYSQL_USER=test_user
+      - MYSQL_PASSWORD=Test_Pass_1
+      - MYSQL_ROOT_PASSWORD=Root_Pass_1
     volumes:
-      - data03:/usr/share/elasticsearch/data
-    ports:
-      - 9202:9202
+      - ./docker-configs/mysql/conf.d:/etc/mysql/conf.d
+      - ./dataset/ml-100k/u.item:/var/lib/mysql-files/u.item
+      - ./docker-configs/mysql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
     networks:
       - elastic
 
-  kib01:
-    image: docker.elastic.co/kibana/kibana:7.9.1
-    container_name: kib01
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.9.2
     ports:
-      - 5601:5601
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    volumes:
+      - ./dataset/access.log:/dataset/access.log
+      - ./plugins/mysql-connector-java-8.0.21:/plugins/mysql-connector-java-8.0.21
+      - ./docker-configs/logstash/pipeline:/usr/share/logstash/pipeline
+      - ./docker-configs/logstash/config/pipelines.yml:/usr/share/logstash/config/pipelines.yml
+    # command: bin/logstash -f /usr/share/logstash/pipeline/logstash.conf
+    command: --config.reload.automatic
     environment:
-      ELASTICSEARCH_URL: http://es01:9200
-      ELASTICSEARCH_HOSTS: http://es01:9200
+      http.host: "0.0.0.0"
+      LS_JAVA_OPTS: "-Xms512m -Xmx512m"
     networks:
       - elastic
-
-volumes:
-  data01:
-    driver: local
-  data02:
-    driver: local
-  data03:
-    driver: local
+    depends_on:
+      - elasticsearch
+      - mysql
 
 networks:
   elastic:

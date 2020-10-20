@@ -1,0 +1,4 @@
+- pipeline.id: file-pipeline
+  path.config: "/usr/share/logstash/pipeline/file-pipeline.conf"
+- pipeline.id: mysql-pipeline
+  path.config: "/usr/share/logstash/pipeline/mysql-pipeline.conf"
