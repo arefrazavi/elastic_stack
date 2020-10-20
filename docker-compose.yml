@@ -12,7 +12,8 @@ services:
       node.name: "elasticsearch"
       cluster.name: "es-docker-cluster"
       bootstrap.memory_lock: "true"
-      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      # Max Heap size
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
     volumes:
       - /usr/share/elasticsearch/data
     ulimits:
@@ -27,10 +28,11 @@ services:
     ports:
       - "5601:5601"
     environment:
-      server.name: kibana
-      server.host: 0.0.0.0
+      SERVER_NAME: kibana
+      SERVER_HOST: 0.0.0.0
       ELASTICSEARCH_URL: http://elasticsearch:9200
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_REQUESTTIMEOUT: 150000
     networks:
       - elastic
     depends_on:
